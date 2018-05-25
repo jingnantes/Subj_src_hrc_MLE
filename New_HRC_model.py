@@ -12,10 +12,10 @@ import numpy as np
 #from scipy.optimize import root
 from scipy.optimize import minimize
 import matplotlib.pyplot as plt
-from scipy.stats.stats import pearsonr
-from scipy.optimize import SR1
+#from scipy.stats.stats import pearsonr
+#from scipy.optimize import SR1
 from scipy.optimize import Bounds
-from scipy.optimize import BFGS
+#from scipy.optimize import BFGS
 
 
 
@@ -23,6 +23,8 @@ from scipy.optimize import BFGS
 global pvs_num
 global obs_num
 global src_num
+
+#iteration_time = 3 # run iteration_time optimization function
 
 """Zhi's MLE synthetic data setup
 synthetic_result={
@@ -37,28 +39,23 @@ synthetic_result={
 
 
 """ simulation parameter setup """
-src_num = 10
-hrc_num = 10
+src_num = 15
+hrc_num = 20
 pvs_num = src_num*hrc_num
-obs_num = 25
+obs_num = 28
 
 ## do not change this part
 """ hrc true score"""
 xh = np.random.uniform(1,5,hrc_num)
-
 """ observer bias """
 bs = np.random.uniform(-2,2,obs_num)
 #bs = np.random.normal(0, 1, obs_num)
-
 """ observer inconsistency """
-vs = np.random.uniform(0,1,obs_num)
-
-
+vs = np.random.uniform(0.1,0.5,obs_num)
 """ content ambiguity """
-ae = np.random.uniform(0,1,src_num)
-
+ae = np.random.uniform(0.4,0.6,src_num)
 """ hrc ambiguity"""
-ha = np.random.uniform(0,1,hrc_num)
+ha = np.random.uniform(0.1,0.5,hrc_num)
 
 """ hrc-src ambicuity covariance"""
 #hs = np.random.uniform(0,0,pvs_num)
@@ -202,9 +199,9 @@ def L_dev(x):
 """ Initialization value for xe,bs,vs, ae """
 xh0 = np.mean(hrcmos,1) # calculate column mean
 bs0 = np.zeros(obs_num)
-ha0 = np.std(hrcmos,1)
-ae0 = np.std(srcmos,1)
-vs0 = np.std(xes,1)
+ha0 = np.std(hrcmos,axis=1,ddof=1)
+ae0 = np.std(srcmos,axis=1,ddof=1)
+vs0 = np.std(xes,axis=1,ddof=1)
 #hs0 = np.zeros(pvs_num)
 
 
@@ -213,19 +210,26 @@ vs0 = np.std(xes,1)
 xinput = np.r_[xh0,bs0,ha0,ae0,vs0]
 
 """ set lower and upper bounds for each parameter """
-tempstd = np.std(hrcmos,1)
-usestd = np.max(tempstd)
+tempstd = np.std(hrcmos,axis=1)
+hrcusestd = np.max(tempstd)
+
+tempstd = np.std(srcmos,axis=1)
+srcusestd = np.max(tempstd)
+
+tempstd = np.std(xes,axis=1)
+obsusestd = np.max(tempstd)
+
 
 xelb = np.zeros(hrc_num)
 xeub = 6*np.ones(hrc_num)
 bslb = -2*np.ones(obs_num)
 bsub = 2*np.ones(obs_num)
 halb = 0.0001*np.ones(hrc_num)
-haub = usestd*np.ones(hrc_num)
+haub = hrcusestd*np.ones(hrc_num)
 aelb = 0.001*np.ones(src_num)
-aeub = usestd*np.ones(src_num)
+aeub = srcusestd*np.ones(src_num)
 vslb = 0.001*np.ones(obs_num)
-vsub = usestd*np.ones(obs_num)
+vsub = obsusestd*np.ones(obs_num)
 #hslb =-0.05*np.ones(pvs_num)
 #hsub =-0.01*np.ones(pvs_num)
 
@@ -247,7 +251,7 @@ bounds = Bounds(lb, ub)
 """ This method is significantly better than the method without constraints """
 #res = minimize(Lfunction, xinput, method='trust-constr',  jac=L_dev, hess = BFGS(), options={'verbose': 1}, bounds=bounds)
 res = minimize(Lfunction, xinput, method='SLSQP', jac=L_dev, options={'ftol': 1e-9, 'disp': True}, bounds=bounds)
-res = minimize(Lfunction, res.x, method='SLSQP', jac=L_dev, options={'ftol': 1e-9, 'disp': True}, bounds=bounds)
+#res = minimize(Lfunction, xinput, method='SLSQP', jac='2-point', options={'ftol': 1e-9, 'disp': True}, bounds=bounds)
 
 print res
 ############# end of the optimization process##############
@@ -275,6 +279,10 @@ print 'RMSE of content ambiguity', rmse_content
 print 'RMSE of hrc ambiguity', rmse_hrcambiguity
 #print 'RMSE of srchrc covariance', rmse_srchrc
 
+plt.scatter(xh,xh0,marker=r'$\clubsuit$')
+plt.xlabel("ground truth hrc score, xh")
+plt.ylabel("observed hrc quality score")
+plt.show()
 
 plt.scatter(xh,xhe,marker=r'$\clubsuit$')
 plt.xlabel("ground truth hrc score, xh")
@@ -305,3 +313,64 @@ plt.show()
 #plt.xlabel("ground truth srchrc covariance, hs")
 #plt.ylabel("estimated hse")
 #plt.show()
+
+
+"""use the output as the input of next round, to check if the performance will be improved"""
+#for loopn in range(iteration_time):
+#    res = minimize(Lfunction, res.x, method='SLSQP', jac=L_dev, options={'ftol': 1e-9, 'disp': True}, bounds=bounds)
+#
+#print res
+#
+#xhe = res.x[range(0,hrc_num)]
+#bse = res.x[range(hrc_num,hrc_num+obs_num)]
+#hae = res.x[range(hrc_num+obs_num,2*hrc_num+obs_num)]
+#aee = res.x[range(2*hrc_num+obs_num,2*hrc_num+obs_num+src_num)]
+#vse = res.x[range(2*hrc_num+obs_num+src_num,2*hrc_num+2*obs_num+src_num)]
+##hse = res.x[range(2*hrc_num+2*obs_num+src_num,2*hrc_num+2*obs_num+src_num+pvs_num)]
+#    
+#
+#rmse_observe = np.sqrt(np.mean((xh-xh0)**2)) 
+#rmse_quality = np.sqrt(np.mean((xh-xhe)**2))
+#rmse_bias = np.sqrt(np.mean((bs-bse)**2)) 
+#rmse_inconsistency = np.sqrt(np.mean((vs-vse)**2))
+#rmse_content = np.sqrt(np.mean((ae-aee)**2)) 
+#rmse_hrcambiguity = np.sqrt(np.mean((ha-hae)**2)) 
+##rmse_srchrc = np.sqrt(np.mean(hs-hse)**2)
+#print 'RMSE between observed score xes and the gt score xe is',rmse_observe
+#print 'RMSE between estimated score xee and the gt score xe is',rmse_quality
+#print 'RMSE of bias', rmse_bias
+#print 'RMSE of inconsistency', rmse_inconsistency
+#print 'RMSE of content ambiguity', rmse_content
+#print 'RMSE of hrc ambiguity', rmse_hrcambiguity
+##print 'RMSE of srchrc covariance', rmse_srchrc
+#
+#
+#plt.scatter(xh,xhe,marker=r'$\clubsuit$')
+#plt.xlabel("ground truth hrc score, xh")
+#plt.ylabel("estimated xhe")
+#plt.show()
+#
+#plt.scatter(ha,hae,marker=r'$\clubsuit$')
+#plt.xlabel("ground truth hrc ambiguity, ha")
+#plt.ylabel("estimated hae")
+#plt.show()
+#
+#plt.scatter(bs,bse,marker=r'$\clubsuit$')
+#plt.xlabel("ground truth observer bias, bs")
+#plt.ylabel("estimated bse")
+#plt.show()
+#
+#plt.scatter(vs,vse,marker=r'$\clubsuit$')
+#plt.xlabel("ground truth observer inconsistency, vs")
+#plt.ylabel("estimated vse")
+#plt.show()
+#
+#plt.scatter(ae,aee,marker=r'$\clubsuit$')
+#plt.xlabel("ground truth content ambiguity, ae")
+#plt.ylabel("estimated aee")
+#plt.show()
+#
+##plt.scatter(hs,hse,marker=r'$\clubsuit$')
+##plt.xlabel("ground truth srchrc covariance, hs")
+##plt.ylabel("estimated hse")
+##plt.show()
